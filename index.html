@@ -444,24 +444,38 @@ async function toggleCamera() {
   scanning = true;
 
   try {
-    html5QrCode = new Html5Qrcode('qrReader');
+    html5QrCode = new Html5Qrcode('qrReader', {
+      experimentalFeatures: { useBarCodeDetectorIfSupported: true },
+      verbose: false,
+    });
     await html5QrCode.start(
       { facingMode: 'environment' },
       {
-        fps: 15,
-        qrbox: { width: 250, height: 150 },
+        fps: 30,
+        // 読み取りエリアを画面の90%まで広げる（小さいバーコード対策）
+        qrbox: (viewfinderWidth, viewfinderHeight) => {
+          const w = Math.floor(viewfinderWidth * 0.9);
+          const h = Math.floor(viewfinderHeight * 0.6);
+          return { width: w, height: h };
+        },
         formatsToSupport: [
-          Html5QrcodeSupportedFormats.EAN_13,
-          Html5QrcodeSupportedFormats.EAN_8,
           Html5QrcodeSupportedFormats.CODE_128,
           Html5QrcodeSupportedFormats.CODE_39,
-          Html5QrcodeSupportedFormats.QR_CODE,
-          Html5QrcodeSupportedFormats.ITF,
+          Html5QrcodeSupportedFormats.EAN_13,
+          Html5QrcodeSupportedFormats.EAN_8,
           Html5QrcodeSupportedFormats.UPC_A,
           Html5QrcodeSupportedFormats.UPC_E,
+          Html5QrcodeSupportedFormats.ITF,
+          Html5QrcodeSupportedFormats.QR_CODE,
           Html5QrcodeSupportedFormats.DATA_MATRIX,
         ],
-        aspectRatio: 1.5,
+        aspectRatio: 1.7,
+        // 高解像度カメラを要求（細いバーを捉えるため）
+        videoConstraints: {
+          facingMode: 'environment',
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+        },
       },
       (decodedText) => {
         if (scanning) addCode(decodedText);
