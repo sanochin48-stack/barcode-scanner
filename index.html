@@ -448,21 +448,28 @@ async function toggleCamera() {
       experimentalFeatures: { useBarCodeDetectorIfSupported: true },
       verbose: false,
     });
+
+    // 画面の向きに合わせてカメラのアスペクト比と読み取りエリアを動的に設定
+    const isLandscape = window.innerWidth > window.innerHeight;
+    const aspectRatio = isLandscape
+      ? window.innerWidth / Math.min(window.innerHeight, 480)
+      : Math.min(window.innerWidth, 480) / window.innerHeight * 1.2;
+
     await html5QrCode.start(
       { facingMode: 'environment' },
       {
         fps: 30,
-        // 読み取りエリアを画面の90%まで広げる（小さいバーコード対策）
+        // 画面サイズに合わせて読み取りエリアを最大化
         qrbox: (viewfinderWidth, viewfinderHeight) => {
-          const w = Math.floor(viewfinderWidth * 0.9);
-          const h = Math.floor(viewfinderHeight * 0.6);
+          // 横長（タブレット・横向き）の場合は縦を広く取る
+          const w = Math.floor(viewfinderWidth * 0.92);
+          const h = Math.floor(viewfinderHeight * 0.85);
           return { width: w, height: h };
         },
         formatsToSupport: [
           Html5QrcodeSupportedFormats.CODE_128,
         ],
-        aspectRatio: 1.7,
-        // 高解像度カメラを要求（細いバーを捉えるため）
+        aspectRatio: aspectRatio,
         videoConstraints: {
           facingMode: 'environment',
           width: { ideal: 1920 },
@@ -597,6 +604,25 @@ if (scannedData.length > 0) {
   document.getElementById('startModal').style.display = 'flex';
 }
 updateUI();
+
+// 画面回転時にカメラを再起動（タブレット対応）
+let rotateTimer;
+window.addEventListener('orientationchange', () => {
+  if (!scanning) return;
+  clearTimeout(rotateTimer);
+  rotateTimer = setTimeout(async () => {
+    await stopCamera();
+    await toggleCamera();
+  }, 500);
+});
+window.addEventListener('resize', () => {
+  if (!scanning) return;
+  clearTimeout(rotateTimer);
+  rotateTimer = setTimeout(async () => {
+    await stopCamera();
+    await toggleCamera();
+  }, 600);
+});
 </script>
 </body>
 </html>
