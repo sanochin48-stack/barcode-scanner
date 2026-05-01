@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <meta name="theme-color" content="#1D9E75" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="バーコードスキャナー" />
+  <title>バーコードスキャナー</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --green: #1D9E75;
+      --green-dark: #0F6E56;
+      --green-light: #E1F5EE;
+      --green-mid: #5DCAA5;
+      --red: #E24B4A;
+      --red-light: #FCEBEB;
+      --amber: #EF9F27;
+      --amber-light: #FAEEDA;
+      --gray-50: #F1EFE8;
+      --gray-200: #B4B2A9;
+      --gray-600: #5F5E5A;
+      --gray-800: #444441;
+      --gray-900: #2C2C2A;
+      --text: #1a1a1a;
+      --text-sub: #5F5E5A;
+      --bg: #ffffff;
+      --bg2: #F7F6F2;
+      --border: rgba(0,0,0,0.12);
+      --radius: 10px;
+      --radius-lg: 14px;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --text: #F1EFE8;
+        --text-sub: #B4B2A9;
+        --bg: #1c1c1a;
+        --bg2: #252523;
+        --border: rgba(255,255,255,0.12);
+        --green-light: #04342C;
+        --red-light: #3a1010;
+        --amber-light: #2d1e04;
+      }
+    }
+    html, body { height: 100%; background: var(--bg2); font-family: -apple-system, 'Hiragino Sans', 'Yu Gothic UI', sans-serif; color: var(--text); }
+
+    /* Header */
+    .header {
+      background: var(--green);
+      color: #fff;
+      padding: env(safe-area-inset-top, 0) 0 0;
+      position: sticky; top: 0; z-index: 50;
+    }
+    .header-inner { display: flex; align-items: center; gap: 10px; padding: 14px 16px; }
+    .header-icon { width: 28px; height: 28px; }
+    .header h1 { font-size: 17px; font-weight: 600; flex: 1; }
+    .header-sub { font-size: 11px; opacity: 0.8; }
+
+    /* Cards */
+    .card {
+      background: var(--bg);
+      border-radius: var(--radius-lg);
+      margin: 12px 12px 0;
+      overflow: hidden;
+      border: 0.5px solid var(--border);
+    }
+    .card-header {
+      padding: 12px 14px 0;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-sub);
+      text-transform: uppercase;
+      letter-spacing: 0.7px;
+    }
+
+    /* Stats */
+    .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 12px; }
+    .stat { background: var(--bg2); border-radius: var(--radius); padding: 10px 12px; }
+    .stat-val { font-size: 26px; font-weight: 700; color: var(--text); line-height: 1; }
+    .stat-lbl { font-size: 11px; color: var(--text-sub); margin-top: 4px; }
+
+    /* Scanner area */
+    .scan-area { padding: 12px 14px 14px; }
+    .video-wrap {
+      position: relative;
+      width: 100%;
+      border-radius: var(--radius);
+      overflow: hidden;
+      background: #000;
+      display: none;
+      margin-bottom: 10px;
+    }
+    video { width: 100%; display: block; max-height: 220px; object-fit: cover; }
+    .scan-overlay {
+      position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .scan-frame {
+      width: 200px; height: 120px;
+      border: 2px solid rgba(255,255,255,0.8);
+      border-radius: 8px;
+      position: relative;
+    }
+    .scan-line {
+      position: absolute;
+      left: 0; right: 0; height: 2px;
+      background: linear-gradient(90deg, transparent, var(--green-mid), transparent);
+      animation: scan 2s ease-in-out infinite;
+    }
+    @keyframes scan { 0%,100% { top: 10%; } 50% { top: 80%; } }
+    .corner { position: absolute; width: 16px; height: 16px; border-color: var(--green-mid); border-style: solid; }
+    .c-tl { top: -2px; left: -2px; border-width: 3px 0 0 3px; border-radius: 4px 0 0 0; }
+    .c-tr { top: -2px; right: -2px; border-width: 3px 3px 0 0; border-radius: 0 4px 0 0; }
+    .c-bl { bottom: -2px; left: -2px; border-width: 0 0 3px 3px; border-radius: 0 0 0 4px; }
+    .c-br { bottom: -2px; right: -2px; border-width: 0 3px 3px 0; border-radius: 0 0 4px 0; }
+
+    /* Buttons */
+    .btn {
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      width: 100%; padding: 13px;
+      border-radius: var(--radius); border: none;
+      font-size: 15px; font-weight: 600; cursor: pointer;
+      transition: transform 0.1s, opacity 0.15s;
+    }
+    .btn:active { transform: scale(0.97); }
+    .btn:disabled { opacity: 0.4; cursor: default; }
+    .btn-primary { background: var(--green); color: #fff; }
+    .btn-primary.scanning { background: var(--red); }
+    .btn-send { background: var(--gray-900); color: #fff; margin-top: 8px; }
+    .btn-outline {
+      background: transparent; color: var(--text);
+      border: 0.5px solid var(--border);
+      font-size: 14px; font-weight: 500; padding: 10px;
+    }
+    .btn-row { display: flex; gap: 8px; margin-top: 8px; }
+    .btn-row .btn { flex: 1; padding: 10px; font-size: 14px; font-weight: 500; }
+
+    /* Manual input */
+    .manual-row { display: flex; gap: 8px; margin-top: 10px; }
+    .input {
+      flex: 1; padding: 11px 12px;
+      border: 0.5px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--bg2); color: var(--text);
+      font-size: 15px;
+    }
+    .input:focus { outline: none; box-shadow: 0 0 0 2px var(--green-mid); }
+    .manual-row .btn { width: auto; flex-shrink: 0; padding: 11px 16px; font-size: 15px; }
+
+    /* List */
+    .list { padding: 0 14px 14px; max-height: 300px; overflow-y: auto; }
+    .list-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 0;
+      border-bottom: 0.5px solid var(--border);
+    }
+    .list-item:last-child { border-bottom: none; }
+    .list-num {
+      width: 24px; height: 24px; border-radius: 50%;
+      background: var(--green-light); color: var(--green-dark);
+      font-size: 12px; font-weight: 600;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .list-code { flex: 1; font-size: 14px; font-family: 'Courier New', monospace; word-break: break-all; }
+    .list-time { font-size: 11px; color: var(--text-sub); flex-shrink: 0; }
+    .empty { text-align: center; padding: 24px 0; color: var(--text-sub); font-size: 14px; }
+
+    /* Status badge */
+    .status-badge {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 4px 10px; border-radius: 99px;
+      font-size: 12px; font-weight: 600;
+    }
+    .status-dot { width: 7px; height: 7px; border-radius: 50%; }
+    .badge-idle { background: var(--bg2); color: var(--text-sub); }
+    .badge-idle .status-dot { background: var(--gray-200); }
+    .badge-scan { background: var(--green-light); color: var(--green-dark); }
+    .badge-scan .status-dot { background: var(--green); animation: pulse 1s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+    /* Toast */
+    .toast {
+      position: fixed; bottom: calc(env(safe-area-inset-bottom,0) + 20px);
+      left: 50%; transform: translateX(-50%) translateY(10px);
+      background: var(--gray-900); color: #fff;
+      padding: 11px 20px; border-radius: 99px;
+      font-size: 14px; white-space: nowrap;
+      opacity: 0; transition: opacity 0.2s, transform 0.2s;
+      z-index: 200; max-width: calc(100vw - 32px);
+      white-space: normal; text-align: center;
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    .toast.warn { background: var(--red); }
+    .toast.success { background: var(--green-dark); }
+
+    /* Modal */
+    .modal-bg {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.5);
+      display: flex; align-items: flex-end; justify-content: center;
+      z-index: 100; padding-bottom: env(safe-area-inset-bottom, 0);
+    }
+    .modal {
+      background: var(--bg);
+      border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+      padding: 24px 20px 28px;
+      width: 100%; max-width: 480px;
+    }
+    .modal h2 { font-size: 18px; font-weight: 700; margin-bottom: 8px; }
+    .modal p { font-size: 14px; color: var(--text-sub); line-height: 1.6; margin-bottom: 20px; }
+    .modal-btns { display: flex; flex-direction: column; gap: 10px; }
+
+    /* Bottom padding */
+    .bottom-space { height: calc(env(safe-area-inset-bottom, 0) + 20px); }
+
+    /* Sent indicator */
+    .sent-row { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-sub); padding: 8px 14px; background: var(--green-light); border-radius: 0 0 var(--radius-lg) var(--radius-lg); }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-inner">
+    <svg class="header-icon" viewBox="0 0 28 28" fill="none">
+      <rect x="2" y="4" width="3" height="20" fill="white"/>
+      <rect x="7" y="4" width="1.5" height="20" fill="white"/>
+      <rect x="10" y="4" width="3" height="20" fill="white"/>
+      <rect x="15" y="4" width="1.5" height="20" fill="white"/>
+      <rect x="18" y="4" width="2" height="20" fill="white"/>
+      <rect x="22" y="4" width="3" height="20" fill="white"/>
+    </svg>
+    <div style="flex:1">
+      <div class="header h1">バーコードスキャナー</div>
+      <div class="header-sub">→ Google スプレッドシート</div>
+    </div>
+    <div id="scanBadge" class="status-badge badge-idle">
+      <div class="status-dot"></div>
+      待機中
+    </div>
+  </div>
+</div>
+
+<!-- 統計 -->
+<div class="card">
+  <div class="stats">
+    <div class="stat">
+      <div class="stat-val" id="statCount">0</div>
+      <div class="stat-lbl">保存件数</div>
+    </div>
+    <div class="stat">
+      <div class="stat-val" id="statDup">0</div>
+      <div class="stat-lbl">重複スキップ</div>
+    </div>
+  </div>
+</div>
+
+<!-- スキャナー -->
+<div class="card">
+  <div class="card-header" style="padding:12px 14px 10px">スキャン</div>
+  <div class="scan-area">
+    <div class="video-wrap" id="videoWrap">
+      <video id="camVideo" autoplay muted playsinline></video>
+      <div class="scan-overlay">
+        <div class="scan-frame">
+          <div class="scan-line"></div>
+          <div class="corner c-tl"></div>
+          <div class="corner c-tr"></div>
+          <div class="corner c-bl"></div>
+          <div class="corner c-br"></div>
+        </div>
+      </div>
+    </div>
+    <button class="btn btn-primary" id="camBtn" onclick="toggleCamera()">
+      📷 カメラで読み取り開始
+    </button>
+    <div class="manual-row">
+      <input class="input" id="manualInput" placeholder="手動入力（テスト用）" />
+      <button class="btn btn-primary" onclick="manualAdd()">追加</button>
+    </div>
+  </div>
+</div>
+
+<!-- 保存データ -->
+<div class="card">
+  <div class="card-header" style="padding:12px 14px 8px; display:flex; align-items:center; justify-content:space-between;">
+    <span>保存データ</span>
+  </div>
+  <div class="list" id="dataList">
+    <div class="empty">まだデータがありません</div>
+  </div>
+  <div style="padding:0 14px 14px; display:flex; flex-direction:column; gap:8px;">
+    <button class="btn btn-send" id="sendBtn" onclick="sendData()" disabled>
+      📤 スプレッドシートに送信
+    </button>
+    <button class="btn btn-outline" onclick="confirmClear()">🗑 データをクリア</button>
+  </div>
+  <div class="sent-row" id="sentRow" style="display:none">
+    <span>✓</span>
+    <span id="sentMsg"></span>
+  </div>
+</div>
+
+<div class="bottom-space"></div>
+
+<!-- 起動時モーダル -->
+<div class="modal-bg" id="startModal" style="display:none">
+  <div class="modal">
+    <h2>前回のデータが残っています</h2>
+    <p><strong id="modalCount">0</strong>件のデータがあります。<br>クリアしてから始めますか？</p>
+    <div class="modal-btns">
+      <button class="btn btn-primary" style="background:var(--red)" onclick="clearAndStart()">🗑 クリアして開始</button>
+      <button class="btn btn-outline" onclick="keepAndStart()">そのまま続ける</button>
+    </div>
+  </div>
+</div>
+
+<!-- クリア確認モーダル -->
+<div class="modal-bg" id="clearModal" style="display:none">
+  <div class="modal">
+    <h2>データをクリアしますか？</h2>
+    <p>保存されている <strong id="clearCount">0</strong> 件のデータをすべて削除します。<br>この操作は取り消せません。</p>
+    <div class="modal-btns">
+      <button class="btn btn-primary" style="background:var(--red)" onclick="doClear()">削除する</button>
+      <button class="btn btn-outline" onclick="document.getElementById('clearModal').style.display='none'">キャンセル</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
+<script>
+// =============================================
+// 設定（固定）
+// =============================================
+const GAS_URL = 'YOUR_GAS_URL_HERE'; // GASデプロイ後にここを書き換えてください
+
+// =============================================
+// 状態
+// =============================================
+let scannedData = [];
+let dupCount = 0;
+let scanning = false;
+let codeReader = null;
+let stream = null;
+let lastScanned = '';
+let lastScannedTime = 0;
+
+// =============================================
+// 永続化
+// =============================================
+function loadData() {
+  try {
+    scannedData = JSON.parse(localStorage.getItem('bc_data') || '[]');
+    dupCount = parseInt(localStorage.getItem('bc_dup') || '0');
+  } catch(e) { scannedData = []; dupCount = 0; }
+}
+
+function saveData() {
+  localStorage.setItem('bc_data', JSON.stringify(scannedData));
+  localStorage.setItem('bc_dup', String(dupCount));
+}
+
+// =============================================
+// UI更新
+// =============================================
+function updateUI() {
+  document.getElementById('statCount').textContent = scannedData.length;
+  document.getElementById('statDup').textContent = dupCount;
+
+  const list = document.getElementById('dataList');
+  if (scannedData.length === 0) {
+    list.innerHTML = '<div class="empty">まだデータがありません</div>';
+  } else {
+    list.innerHTML = [...scannedData].reverse().map((item, i) => {
+      const num = scannedData.length - i;
+      return `<div class="list-item">
+        <div class="list-num">${num}</div>
+        <div class="list-code">${esc(item.code)}</div>
+        <div class="list-time">${item.time}</div>
+      </div>`;
+    }).join('');
+  }
+  document.getElementById('sendBtn').disabled = scannedData.length === 0;
+}
+
+function esc(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// =============================================
+// トースト
+// =============================================
+let toastTimer;
+function showToast(msg, type = '', duration = 2500) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (type ? ' ' + type : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), duration);
+}
+
+// =============================================
+// バーコード追加
+// =============================================
+function addCode(code) {
+  code = code.trim();
+  if (!code) return;
+
+  // 重複チェック（連続スキャン防止も兼ねる）
+  const now = Date.now();
+  if (code === lastScanned && now - lastScannedTime < 2000) return;
+  lastScanned = code;
+  lastScannedTime = now;
+
+  if (scannedData.some(d => d.code === code)) {
+    dupCount++;
+    saveData();
+    updateUI();
+    showToast('⚠ 既に読み取っています: ' + code, 'warn');
+    return;
+  }
+
+  const t = new Date();
+  const time = t.getHours().toString().padStart(2,'0') + ':' +
+               t.getMinutes().toString().padStart(2,'0') + ':' +
+               t.getSeconds().toString().padStart(2,'0');
+  scannedData.push({ code, time });
+  saveData();
+  updateUI();
+  showToast('✓ ' + code, 'success');
+
+  // 触覚フィードバック（対応デバイスのみ）
+  if (navigator.vibrate) navigator.vibrate(50);
+}
+
+// =============================================
+// カメラ
+// =============================================
+async function toggleCamera() {
+  if (scanning) { stopCamera(); return; }
+
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } }
+    });
+    const video = document.getElementById('camVideo');
+    video.srcObject = stream;
+    document.getElementById('videoWrap').style.display = 'block';
+    document.getElementById('camBtn').innerHTML = '⏹ スキャン停止';
+    document.getElementById('camBtn').classList.add('scanning');
+    document.getElementById('scanBadge').className = 'status-badge badge-scan';
+    document.getElementById('scanBadge').innerHTML = '<div class="status-dot"></div>スキャン中';
+    scanning = true;
+
+    if (typeof ZXing !== 'undefined') {
+      const hints = new Map();
+      hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+        ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8,
+        ZXing.BarcodeFormat.CODE_128, ZXing.BarcodeFormat.CODE_39,
+        ZXing.BarcodeFormat.QR_CODE, ZXing.BarcodeFormat.ITF,
+        ZXing.BarcodeFormat.DATA_MATRIX, ZXing.BarcodeFormat.UPC_A,
+        ZXing.BarcodeFormat.UPC_E,
+      ]);
+      codeReader = new ZXing.BrowserMultiFormatReader(hints);
+      codeReader.decodeFromVideoElement(video, (result, err) => {
+        if (result && scanning) addCode(result.getText());
+      });
+    } else {
+      showToast('ライブラリ読み込み中... 少し待ってから再試行してください');
+    }
+  } catch(e) {
+    showToast('カメラにアクセスできません', 'warn', 3000);
+    console.error(e);
+  }
+}
+
+function stopCamera() {
+  scanning = false;
+  if (codeReader) { try { codeReader.reset(); } catch(e){} codeReader = null; }
+  if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+  document.getElementById('videoWrap').style.display = 'none';
+  document.getElementById('camBtn').innerHTML = '📷 カメラで読み取り開始';
+  document.getElementById('camBtn').classList.remove('scanning');
+  document.getElementById('scanBadge').className = 'status-badge badge-idle';
+  document.getElementById('scanBadge').innerHTML = '<div class="status-dot"></div>待機中';
+}
+
+// =============================================
+// 手動入力
+// =============================================
+function manualAdd() {
+  const inp = document.getElementById('manualInput');
+  addCode(inp.value);
+  inp.value = '';
+}
+document.getElementById('manualInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') manualAdd();
+});
+
+// =============================================
+// クリア
+// =============================================
+function confirmClear() {
+  if (scannedData.length === 0) { showToast('データがありません'); return; }
+  document.getElementById('clearCount').textContent = scannedData.length;
+  document.getElementById('clearModal').style.display = 'flex';
+}
+function doClear() {
+  scannedData = []; dupCount = 0;
+  saveData(); updateUI();
+  document.getElementById('clearModal').style.display = 'none';
+  document.getElementById('sentRow').style.display = 'none';
+  showToast('クリアしました');
+}
+
+// =============================================
+// 起動時モーダル
+// =============================================
+function clearAndStart() {
+  scannedData = []; dupCount = 0;
+  saveData(); updateUI();
+  document.getElementById('startModal').style.display = 'none';
+  showToast('クリアしました');
+}
+function keepAndStart() {
+  document.getElementById('startModal').style.display = 'none';
+}
+
+// =============================================
+// 送信
+// =============================================
+async function sendData() {
+  if (scannedData.length === 0) return;
+  if (GAS_URL === 'YOUR_GAS_URL_HERE') {
+    showToast('GAS URLが設定されていません。index.html の GAS_URL を書き換えてください。', 'warn', 4000);
+    return;
+  }
+
+  const btn = document.getElementById('sendBtn');
+  btn.disabled = true;
+  btn.innerHTML = '送信中...';
+
+  try {
+    const payload = {
+      barcodes: scannedData,
+      sentAt: new Date().toISOString()
+    };
+    const res = await fetch(GAS_URL, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+      headers: { 'Content-Type': 'text/plain' }
+    });
+    const json = await res.json();
+    if (json.status === 'ok') {
+      const count = scannedData.length;
+      scannedData = []; dupCount = 0;
+      saveData(); updateUI();
+      const sentRow = document.getElementById('sentRow');
+      document.getElementById('sentMsg').textContent = `${count}件を送信しました（${new Date().toLocaleTimeString('ja-JP')}）`;
+      sentRow.style.display = 'flex';
+      showToast(`✓ ${count}件を送信しました`, 'success', 3000);
+    } else {
+      throw new Error(json.message || '不明なエラー');
+    }
+  } catch(e) {
+    showToast('送信エラー: ' + e.message, 'warn', 4000);
+  } finally {
+    btn.disabled = scannedData.length === 0;
+    btn.innerHTML = '📤 スプレッドシートに送信';
+  }
+}
+
+// =============================================
+// 起動
+// =============================================
+loadData();
+if (scannedData.length > 0) {
+  document.getElementById('modalCount').textContent = scannedData.length;
+  document.getElementById('startModal').style.display = 'flex';
+}
+updateUI();
+</script>
+</body>
+</html>
