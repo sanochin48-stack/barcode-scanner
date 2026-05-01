@@ -265,16 +265,7 @@
   <div class="card-header" style="padding:12px 14px 10px">スキャン</div>
   <div class="scan-area">
     <div class="video-wrap" id="videoWrap">
-      <video id="camVideo" autoplay muted playsinline></video>
-      <div class="scan-overlay">
-        <div class="scan-frame">
-          <div class="scan-line"></div>
-          <div class="corner c-tl"></div>
-          <div class="corner c-tr"></div>
-          <div class="corner c-bl"></div>
-          <div class="corner c-br"></div>
-        </div>
-      </div>
+      <div id="qrReader" style="width:100%;border-radius:var(--radius);overflow:hidden;"></div>
     </div>
     <button class="btn btn-primary" id="camBtn" onclick="toggleCamera()">
       📷 カメラで読み取り開始
@@ -334,7 +325,7 @@
 
 <div class="toast" id="toast"></div>
 
-<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script>
 // =============================================
 // 設定（固定）
@@ -347,8 +338,7 @@ const GAS_URL = 'https://script.google.com/macros/s/AKfycbwZ5tkLVRvSn5e6uvJu0AAR
 let scannedData = [];
 let dupCount = 0;
 let scanning = false;
-let codeReader = null;
-let stream = null;
+let html5QrCode = null;
 let lastScanned = '';
 let lastScannedTime = 0;
 
@@ -446,46 +436,61 @@ function addCode(code) {
 async function toggleCamera() {
   if (scanning) { stopCamera(); return; }
 
-  try {
-    stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } }
-    });
-    const video = document.getElementById('camVideo');
-    video.srcObject = stream;
-    document.getElementById('videoWrap').style.display = 'block';
-    document.getElementById('camBtn').innerHTML = '⏹ スキャン停止';
-    document.getElementById('camBtn').classList.add('scanning');
-    document.getElementById('scanBadge').className = 'status-badge badge-scan';
-    document.getElementById('scanBadge').innerHTML = '<div class="status-dot"></div>スキャン中';
-    scanning = true;
+  document.getElementById('videoWrap').style.display = 'block';
+  document.getElementById('camBtn').innerHTML = '⏹ スキャン停止';
+  document.getElementById('camBtn').classList.add('scanning');
+  document.getElementById('scanBadge').className = 'status-badge badge-scan';
+  document.getElementById('scanBadge').innerHTML = '<div class="status-dot"></div>スキャン中';
+  scanning = true;
 
-    if (typeof ZXing !== 'undefined') {
-      const hints = new Map();
-      hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
-        ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8,
-        ZXing.BarcodeFormat.CODE_128, ZXing.BarcodeFormat.CODE_39,
-        ZXing.BarcodeFormat.QR_CODE, ZXing.BarcodeFormat.ITF,
-        ZXing.BarcodeFormat.DATA_MATRIX, ZXing.BarcodeFormat.UPC_A,
-        ZXing.BarcodeFormat.UPC_E,
-      ]);
-      codeReader = new ZXing.BrowserMultiFormatReader(hints);
-      codeReader.decodeFromVideoElement(video, (result, err) => {
-        if (result && scanning) addCode(result.getText());
-      });
-    } else {
-      showToast('ライブラリ読み込み中... 少し待ってから再試行してください');
-    }
+  try {
+    html5QrCode = new Html5Qrcode('qrReader');
+    await html5QrCode.start(
+      { facingMode: 'environment' },
+      {
+        fps: 15,
+        qrbox: { width: 250, height: 150 },
+        formatsToSupport: [
+          Html5QrcodeSupportedFormats.EAN_13,
+          Html5QrcodeSupportedFormats.EAN_8,
+          Html5QrcodeSupportedFormats.CODE_128,
+          Html5QrcodeSupportedFormats.CODE_39,
+          Html5QrcodeSupportedFormats.QR_CODE,
+          Html5QrcodeSupportedFormats.ITF,
+          Html5QrcodeSupportedFormats.UPC_A,
+          Html5QrcodeSupportedFormats.UPC_E,
+          Html5QrcodeSupportedFormats.DATA_MATRIX,
+        ],
+        aspectRatio: 1.5,
+      },
+      (decodedText) => {
+        if (scanning) addCode(decodedText);
+      },
+      () => {}
+    );
   } catch(e) {
-    showToast('カメラにアクセスできません', 'warn', 3000);
+    scanning = false;
+    document.getElementById('videoWrap').style.display = 'none';
+    document.getElementById('camBtn').innerHTML = '📷 カメラで読み取り開始';
+    document.getElementById('camBtn').classList.remove('scanning');
+    document.getElementById('scanBadge').className = 'status-badge badge-idle';
+    document.getElementById('scanBadge').innerHTML = '<div class="status-dot"></div>待機中';
+    showToast('カメラにアクセスできません: ' + e, 'warn', 4000);
     console.error(e);
   }
 }
 
-function stopCamera() {
+async function stopCamera() {
   scanning = false;
-  if (codeReader) { try { codeReader.reset(); } catch(e){} codeReader = null; }
-  if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+  if (html5QrCode) {
+    try {
+      await html5QrCode.stop();
+      html5QrCode.clear();
+    } catch(e) {}
+    html5QrCode = null;
+  }
   document.getElementById('videoWrap').style.display = 'none';
+  document.getElementById('qrReader').innerHTML = '';
   document.getElementById('camBtn').innerHTML = '📷 カメラで読み取り開始';
   document.getElementById('camBtn').classList.remove('scanning');
   document.getElementById('scanBadge').className = 'status-badge badge-idle';
